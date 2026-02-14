@@ -61,6 +61,71 @@ export class GmailClient {
     return res.data.id!;
   }
 
+  async replyToEmail(params: {
+    messageId: string;
+    body: string;
+    cc?: string[];
+    bcc?: string[];
+  }): Promise<string> {
+    const { messageId, body, cc, bcc } = params;
+
+    // Fetch the original message to get thread context
+    const original = await this.getMessage(messageId);
+    const headers = original.payload?.headers || [];
+    const getHeader = (name: string) =>
+      headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+    const originalFrom = getHeader('From');
+    const originalTo = getHeader('To');
+    const originalSubject = getHeader('Subject');
+    const originalMessageId = getHeader('Message-ID');
+    const originalReferences = getHeader('References');
+    const threadId = original.threadId;
+
+    // Reply goes to the original sender
+    // Extract email from "Name <email>" format
+    const replyTo = originalFrom;
+
+    // Build subject with Re: prefix (avoid double Re:)
+    const subject = originalSubject.startsWith('Re:')
+      ? originalSubject
+      : `Re: ${originalSubject}`;
+
+    // Build References header (chain of message IDs)
+    const references = originalReferences
+      ? `${originalReferences} ${originalMessageId}`
+      : originalMessageId;
+
+    const messageParts = [
+      `To: ${replyTo}`,
+      `Subject: ${encodeSubject(subject)}`,
+      `In-Reply-To: ${originalMessageId}`,
+      `References: ${references}`,
+    ];
+
+    if (cc?.length) messageParts.push(`Cc: ${cc.join(', ')}`);
+    if (bcc?.length) messageParts.push(`Bcc: ${bcc.join(', ')}`);
+
+    messageParts.push(
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      body
+    );
+
+    const email = messageParts.join('\r\n');
+    const encodedEmail = Buffer.from(email).toString('base64url');
+
+    const res = await this.gmail!.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: encodedEmail,
+        threadId: threadId
+      }
+    });
+
+    return res.data.id!;
+  }
+
   async searchEmails(query: string, maxResults: number = 10): Promise<any> {
     const res = await this.gmail!.users.messages.list({
       userId: 'me',

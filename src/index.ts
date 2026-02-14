@@ -63,6 +63,37 @@ server.tool(
 );
 
 server.tool(
+  "reply_to_email",
+  {
+    account: z.string().email().optional().describe("Gmail account to use (defaults to default account)"),
+    messageId: z.string().describe("Gmail message ID to reply to"),
+    body: z.string().describe("Reply body content"),
+    cc: z.array(z.string().email()).optional(),
+    bcc: z.array(z.string().email()).optional()
+  },
+  async ({ account, messageId, body, cc, bcc }) => {
+    try {
+      const gmailClient = await getGmailClient(account);
+      const replyId = await gmailClient.replyToEmail({ messageId, body, cc, bcc });
+      return {
+        content: [{
+          type: "text",
+          text: `Reply sent successfully from ${gmailClient.getAccountEmail()}. Message ID: ${replyId}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
   "search_emails",
   {
     account: z.string().email().optional().describe("Gmail account to use (defaults to default account)"),
@@ -105,6 +136,62 @@ server.tool(
         content: [{
           type: "text",
           text: `Email from ${gmailClient.getAccountEmail()}:\n${JSON.stringify(message, null, 2)}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  "mark_as_read",
+  {
+    account: z.string().email().optional().describe("Gmail account to use (defaults to default account)"),
+    messageIds: z.array(z.string()).describe("Array of Gmail message IDs to mark as read")
+  },
+  async ({ account, messageIds }) => {
+    try {
+      const gmailClient = await getGmailClient(account);
+      await gmailClient.markAsRead(messageIds);
+      return {
+        content: [{
+          type: "text",
+          text: `Marked ${messageIds.length} message(s) as read in ${gmailClient.getAccountEmail()}.`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+server.tool(
+  "read_email_light",
+  {
+    account: z.string().email().optional().describe("Gmail account to use (defaults to default account)"),
+    messageId: z.string().describe("Gmail message ID")
+  },
+  async ({ account, messageId }) => {
+    try {
+      const gmailClient = await getGmailClient(account);
+      const message = await gmailClient.getMessageLight(messageId);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(message, null, 2)
         }]
       };
     } catch (error) {
